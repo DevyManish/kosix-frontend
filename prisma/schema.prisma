@@ -1,0 +1,105 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum OrganizationRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum MembershipStatus {
+  ACTIVE
+  INVITED
+  DISABLED
+}
+
+enum ProjectStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum DatasourceKind {
+  POSTGRESQL
+  ORACLE
+  MYSQL
+  SQLSERVER
+  SNOWFLAKE
+  BIGQUERY
+  OTHER
+}
+
+model UserProfile {
+  id                 String               @id @db.Uuid
+  email              String               @unique @db.VarChar(320)
+  fullName           String?              @db.VarChar(160)
+  avatarUrl          String?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  memberships        OrganizationMember[] @relation("MemberUser")
+  ownedOrganizations Organization[]       @relation("OrganizationOwner")
+  projectsCreated    Project[]            @relation("ProjectCreator")
+  sentInvites        OrganizationMember[] @relation("MembershipInviter")
+
+  @@index([email])
+}
+
+model Organization {
+  id          String               @id @default(uuid()) @db.Uuid
+  name        String               @db.VarChar(120)
+  slug        String               @unique @db.VarChar(80)
+  ownerId     String               @db.Uuid
+  owner       UserProfile          @relation("OrganizationOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  members     OrganizationMember[]
+  projects    Project[]
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@index([ownerId])
+}
+
+model OrganizationMember {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @db.Uuid
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String?          @db.Uuid
+  user           UserProfile?     @relation("MemberUser", fields: [userId], references: [id], onDelete: SetNull)
+  email          String           @db.VarChar(320)
+  role           OrganizationRole @default(MEMBER)
+  status         MembershipStatus @default(INVITED)
+  invitedById    String?          @db.Uuid
+  invitedBy      UserProfile?     @relation("MembershipInviter", fields: [invitedById], references: [id], onDelete: SetNull)
+  acceptedAt     DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([organizationId, email])
+  @@unique([organizationId, userId])
+  @@index([organizationId, status])
+  @@index([userId])
+}
+
+model Project {
+  id             String         @id @default(uuid()) @db.Uuid
+  organizationId String         @db.Uuid
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdById    String         @db.Uuid
+  createdBy      UserProfile    @relation("ProjectCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  name           String         @db.VarChar(120)
+  slug           String         @db.VarChar(80)
+  description    String?        @db.VarChar(500)
+  datasourceKind DatasourceKind @default(POSTGRESQL)
+  status         ProjectStatus  @default(ACTIVE)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, status])
+  @@index([createdById])
+}
